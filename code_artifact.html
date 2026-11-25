@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>조선 후기 세도 정치와 농민 봉기 생존 시뮬레이터</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: 명조체(역사적 분위기) & 고딕체(가독성) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@600;700;900&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --hanji-bg: #F7F3E9;
+      --hanji-card: #FCF9F2;
+      --hanji-border: #D5CBB8;
+      --ink-black: #2C2825;
+      --ink-muted: #5C554E;
+      --tile-gray: #3D3B38;
+      --seal-red: #B83B32;
+      --seal-red-dark: #8E2820;
+      --gold-accent: #B68938;
+    }
+
+    body {
+      background-color: var(--hanji-bg);
+      color: var(--ink-black);
+      font-family: 'Noto Sans KR', sans-serif;
+      /* 한지 질감을 은은하게 표현하는 배경 패턴 */
+      background-image: 
+        radial-gradient(rgba(180, 165, 140, 0.14) 1px, transparent 0),
+        radial-gradient(rgba(160, 145, 120, 0.1) 1px, transparent 0);
+      background-size: 24px 24px;
+      background-position: 0 0, 12px 12px;
+      min-height: 100vh;
+    }
+
+    .font-serif-kr {
+      font-family: 'Noto Serif KR', serif;
+    }
+
+    /* 전통 창살/문서 테두리 느낌 */
+    .hanji-box {
+      background-color: var(--hanji-card);
+      border: 1.5px solid var(--hanji-border);
+      box-shadow: 0 4px 16px rgba(44, 40, 37, 0.08);
+    }
+
+    .hanji-double-border {
+      position: relative;
+      background-color: var(--hanji-card);
+      border: 2px solid #8C7F6A;
+      box-shadow: 0 8px 24px rgba(44, 40, 37, 0.12);
+    }
+
+    /* 붉은 인장(도장) 스타일 */
+    .crimson-seal {
+      border: 2px solid var(--seal-red);
+      color: var(--seal-red);
+      font-family: 'Noto Serif KR', serif;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      background-color: rgba(184, 59, 50, 0.06);
+      letter-spacing: -0.03em;
+    }
+
+    /* 선택지 버튼 호버 및 터치 반응 */
+    .choice-btn {
+      transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .choice-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      border-color: var(--ink-black);
+      background-color: #F2EBD9;
+      box-shadow: 0 4px 12px rgba(44, 40, 37, 0.12);
+    }
+    .choice-btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    /* 분노 임계치 도달 시 봉기 버튼 강조 애니메이션 */
+    @keyframes pulse-crimson {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(184, 59, 50, 0.45);
+      }
+      50% {
+        box-shadow: 0 0 0 8px rgba(184, 59, 50, 0);
+      }
+    }
+    .uprising-glow {
+      animation: pulse-crimson 2s infinite;
+    }
+
+    /* 모달 등장 애니메이션 */
+    @keyframes fadeInScale {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+    .modal-animate {
+      animation: fadeInScale 0.25s ease-out forwards;
+    }
+  </style>
+</head>
+<body class="antialiased selection:bg-[#B83B32] selection:text-white">
+
+  <!-- 상단 고정 상태창 (게임 진행 중에만 표시) -->
+  <header id="status-bar" class="hidden sticky top-0 z-30 bg-[#2C2825] text-[#F7F3E9] shadow-md border-b-2 border-[#8C7F6A]">
+    <div class="max-w-3xl mx-auto px-3 py-2.5 sm:px-5">
+      <!-- 연도 및 분노 경보 표시줄 -->
+      <div class="flex items-center justify-between text-xs sm:text-sm mb-2 pb-1.5 border-b border-[#4A443F]">
+        <div class="flex items-center gap-2">
+          <span class="bg-[#B83B32] text-white font-bold px-2 py-0.5 rounded text-xs">19세기 세도 정치기</span>
+          <span id="turn-badge" class="font-serif-kr font-bold text-amber-200">1년째 봄 (1 / 10턴)</span>
+        </div>
+        <div id="anger-alert" class="hidden text-xs font-bold text-red-300 flex items-center gap-1 animate-pulse">
+          <span>🔥 민심 폭발 직전! (봉기 가능)</span>
+        </div>
+      </div>
+
+      <!-- 4대 핵심 지표 그리드 -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        <!-- 1. 체력 -->
+        <div class="bg-[#3A3531] rounded-lg p-2 border border-[#524B45]">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-stone-300">❤️ 체력</span>
+            <span id="stat-health-text" class="font-bold text-emerald-300">85 / 100</span>
+          </div>
+          <div class="w-full bg-[#24201E] h-2 rounded-full overflow-hidden">
+            <div id="stat-health-bar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 85%"></div>
+          </div>
+        </div>
+
+        <!-- 2. 식량 -->
+        <div class="bg-[#3A3531] rounded-lg p-2 border border-[#524B45]">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-stone-300">🌾 식량</span>
+            <span id="stat-food-text" class="font-bold text-amber-300">15 가마니</span>
+          </div>
+          <div class="w-full bg-[#24201E] h-2 rounded-full overflow-hidden">
+            <div id="stat-food-bar" class="bg-amber-400 h-full transition-all duration-300" style="width: 75%"></div>
+          </div>
+        </div>
+
+        <!-- 3. 세금 부담률 -->
+        <div class="bg-[#3A3531] rounded-lg p-2 border border-[#524B45]">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-stone-300">📜 세금 부담</span>
+            <span id="stat-tax-text" class="font-bold text-orange-300">30%</span>
+          </div>
+          <div class="w-full bg-[#24201E] h-2 rounded-full overflow-hidden">
+            <div id="stat-tax-bar" class="bg-orange-500 h-full transition-all duration-300" style="width: 30%"></div>
+          </div>
+        </div>
+
+        <!-- 4. 분노 지수 -->
+        <div class="bg-[#3A3531] rounded-lg p-2 border border-[#524B45]">
+          <div class="flex justify-between items-center text-xs mb-1">
+            <span class="text-stone-300">🔥 분노 지수</span>
+            <span id="stat-anger-text" class="font-bold text-rose-400">10%</span>
+          </div>
+          <div class="w-full bg-[#24201E] h-2 rounded-full overflow-hidden">
+            <div id="stat-anger-bar" class="bg-rose-600 h-full transition-all duration-300" style="width: 10%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 메인 컨테이너 -->
+  <main class="max-w-3xl mx-auto px-4 py-6 sm:py-8">
+
+    <!-- [화면 1] 게임 시작 화면 -->
+    <section id="start-screen" class="hanji-double-border rounded-2xl p-6 sm:p-10 text-center">
+      <div class="mb-4">
+        <span class="crimson-seal px-3 py-1 text-xs sm:text-sm">중학교 3학년 역사 체험 시뮬레이션</span>
+      </div>
+      
+      <h1 class="font-serif-kr text-2xl sm:text-4xl font-black text-[#2C2825] leading-tight mb-3">
+        조선 후기 세도 정치와<br class="sm:hidden" /> 농민 봉기 생존기
+      </h1>
+      <p class="text-sm sm:text-base text-[#5C554E] font-medium mb-6">
+        “열심히 땀 흘려 농사를 지어도, 왜 우리 집 곳간은 텅 비어가는가?”
+      </p>
+
+      <!-- 배경 스토리 상자 -->
+      <div class="bg-[#F2ECE0] border border-[#D5CBB8] rounded-xl p-5 sm:p-6 text-left mb-7 space-y-3 text-sm sm:text-base leading-relaxed">
+        <div class="flex items-center gap-2 font-serif-kr font-bold text-[#8E2820] text-base sm:text-lg border-b border-[#D5CBB8] pb-2">
+          <span>📜</span>
+          <span>19세기 초, 어느 삼남 지방 농민 '김서방'의 일기</span>
+        </div>
+        <p>
+          순조 즉위 이후 안동 김씨, 풍양 조씨 등 소수 외척 가문이 권력을 독점하는 <strong>세도 정치</strong>가 시작되었다. 
+          중앙의 고관대작들은 벼슬을 돈으로 사고팔았고(<strong>매관매직</strong>), 큰돈을 주고 지방 수령(사또) 자리에 오른 
+          <strong>탐관오리</strong>들은 본전을 뽑기 위해 백성의 고혈을 짜내기 시작했다.
+        </p>
+        <p>
+          당신은 늙은 어머니와 어린 아들을 부양하는 평범한 농민 <strong>김서방</strong>이다. 
+          앞으로 <strong>5년(총 10턴)</strong> 동안 쏟아지는 <strong>삼정의 문란</strong> 속에서 가족을 지켜내야 한다. 
+          과연 순응하며 살아남을 수 있을까, 아니면 횃불을 들고 일어설 것인가?
+        </p>
+      </div>
+
+      <!-- 생존 규칙 요약 -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs sm:text-sm mb-8">
+        <div class="hanji-box rounded-xl p-3">
+          <div class="text-lg mb-1">❤️ 체력</div>
+          <div class="text-[#5C554E]">0이 되면 과로와 병으로 쓰러집니다.</div>
+        </div>
+        <div class="hanji-box rounded-xl p-3">
+          <div class="text-lg mb-1">🌾 식량</div>
+          <div class="text-[#5C554E]">0 이하가 되면 굶주려 유랑민이 됩니다.</div>
+        </div>
+        <div class="hanji-box rounded-xl p-3">
+          <div class="text-lg mb-1">📜 세금</div>
+          <div class="text-[#5C554E]">매 턴 수탈로 부담률이 폭등합니다.</div>
+        </div>
+        <div class="hanji-box rounded-xl p-3">
+          <div class="text-lg mb-1">🔥 분노</div>
+          <div class="text-[#5C554E]"><strong>75% 이상</strong> 도달 시 <strong>농민 봉기</strong> 가능!</div>
+        </div>
+      </div>
+
+      <button onclick="startGame()" class="w-full sm:w-auto px-8 py-4 bg-[#B83B32] hover:bg-[#8E2820] text-white font-serif-kr font-bold text-lg rounded-xl shadow-lg transition transform hover:-translate-y-0.5 cursor-pointer">
+        농민 김서방으로 삶 시작하기 ➔
+      </button>
+    </section>
+
+    <!-- [화면 2] 메인 게임 플레이 화면 -->
+    <section id="game-screen" class="hidden space-y-5">
+      <!-- 사건 카드 -->
+      <article class="hanji-double-border rounded-2xl p-5 sm:p-8">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4 pb-3 border-b border-[#D5CBB8]">
+          <span id="event-category" class="crimson-seal px-2.5 py-0.5 text-xs font-bold">사건 분류</span>
+          <span id="event-season-info" class="text-xs sm:text-sm text-[#5C554E] font-medium">기본 식량 소모: 매 턴 가족 부양 -1가마니</span>
+        </div>
+
+        <!-- 사건 일러스트 아이콘 + 제목 -->
+        <div class="flex items-start gap-3.5 mb-4">
+          <div id="event-icon" class="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-[#EFE8D8] border border-[#D5CBB8] flex items-center justify-center text-2xl sm:text-3xl shrink-0">
+            🏯
+          </div>
+          <div>
+            <h2 id="event-title" class="font-serif-kr text-xl sm:text-2xl font-bold text-[#2C2825] leading-snug">
+              사건 제목이 여기에 표시됩니다
+            </h2>
+            <p id="event-subtitle" class="text-xs sm:text-sm text-[#8E2820] font-medium mt-0.5">
+              사건 부제목
+            </p>
+          </div>
+        </div>
+
+        <!-- 사건 본문 내러티브 -->
+        <div id="event-desc" class="bg-[#F4EFE4] border-l-4 border-[#8C7F6A] p-4 sm:p-5 rounded-r-xl text-sm sm:text-base leading-relaxed text-[#2C2825] mb-6 space-y-2.5">
+          <!-- JS로 본문 삽입 -->
+        </div>
+
+        <!-- 선택지 영역 -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-serif-kr font-bold text-sm sm:text-base text-[#2C2825]">
+              🤔 김서방의 선택은?
+            </h3>
+            <span id="uprising-status-hint" class="text-xs font-medium text-[#5C554E]">
+              분노 75% 달성 시 민란 루트 해금
+            </span>
+          </div>
+          <div id="choices-container" class="space-y-3">
+            <!-- JS로 선택지 버튼 동적 생성 -->
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- [화면 3] 최종 엔딩 및 수업 활동지 정리 화면 -->
+    <section id="ending-screen" class="hidden space-y-6">
+      <div class="hanji-double-border rounded-2xl p-6 sm:p-9 text-center">
+        <div class="mb-3">
+          <span id="ending-badge" class="crimson-seal px-3 py-1 text-xs sm:text-sm">엔딩 유형</span>
+        </div>
+        <div id="ending-icon" class="text-5xl sm:text-6xl my-3">🔥</div>
+        <h2 id="ending-title" class="font-serif-kr text-2xl sm:text-3xl font-black text-[#2C2825] mb-3">
+          엔딩 제목
+        </h2>
+        <p id="ending-desc" class="bg-[#F2ECE0] border border-[#D5CBB8] rounded-xl p-5 text-left text-sm sm:text-base leading-relaxed text-[#2C2825] mb-6">
+          엔딩 상세 스토리
+        </p>
+
+        <!-- 최종 지표 요약 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-6 text-sm">
+          <div class="hanji-box rounded-xl p-3">
+            <div class="text-xs text-[#5C554E]">최종 체력</div>
+            <div id="end-stat-health" class="font-bold text-base mt-0.5">0</div>
+          </div>
+          <div class="hanji-box rounded-xl p-3">
+            <div class="text-xs text-[#5C554E]">남은 식량</div>
+            <div id="end-stat-food" class="font-bold text-base mt-0.5">0가마니</div>
+          </div>
+          <div class="hanji-box rounded-xl p-3">
+            <div class="text-xs text-[#5C554E]">최종 세금 부담</div>
+            <div id="end-stat-tax" class="font-bold text-base mt-0.5">0%</div>
+          </div>
+          <div class="hanji-box rounded-xl p-3">
+            <div class="text-xs text-[#5C554E]">최종 분노 지수</div>
+            <div id="end-stat-anger" class="font-bold text-base mt-0.5">0%</div>
+          </div>
+        </div>
+
+        <!-- 역사적 의의 해설 -->
+        <div id="ending-history-note" class="bg-[#2C2825] text-[#F7F3E9] rounded-xl p-5 text-left text-sm sm:text-base leading-relaxed mb-2">
+          <!-- JS로 엔딩 역사 의의 삽입 -->
+        </div>
+      </div>
+
+      <!-- 수업 활동지 정리용 핵심 키워드 요약 카드 -->
+      <div class="hanji-box rounded-2xl p-6 sm:p-8 border-2 border-[#8C7F6A]">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#D5CBB8] pb-3 mb-4">
+          <h3 class="font-serif-kr text-lg sm:text-xl font-bold text-[#2C2825]">
+            🎓 수업 활동지 정리용 핵심 키워드 요약
+          </h3>
+          <button onclick="copySummaryToClipboard()" class="px-3 py-1.5 bg-[#3D3B38] hover:bg-[#2C2825] text-white text-xs font-medium rounded-lg transition cursor-pointer">
+            📋 요약 내용 복사하기
+          </button>
+        </div>
+
+        <p class="text-xs sm:text-sm text-[#5C554E] mb-4">
+          이번 시뮬레이션에서 직접 체험한 19세기 조선 후기의 핵심 역사 개념입니다. 활동지에 정리해 보세요!
+        </p>
+
+        <!-- 체험한 개념 리스트 -->
+        <div id="learned-keywords-list" class="space-y-2.5 mb-5">
+          <!-- JS로 플레이어가 겪은 사건들의 역사 개념 자동 정리 -->
+        </div>
+
+        <!-- 토의 질문 박스 -->
+        <div class="bg-[#F2EBD9] border border-[#D5CBB8] rounded-xl p-4 text-sm">
+          <div class="font-bold text-[#8E2820] mb-1">✍️ 활동지 생각 넓히기 질문</div>
+          <p class="text-[#2C2825] leading-relaxed">
+            “농민 김서방이 법대로 세금을 꼬박꼬박 내려고 노력했음에도 끝내 굶주리거나 봉기를 선택할 수밖에 없었던 <strong>구조적 이유</strong>는 무엇이었나요?”
+          </p>
+        </div>
+
+        <!-- 복사 알림 메시지 -->
+        <div id="copy-toast" class="hidden mt-3 text-center text-xs font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 py-2 rounded-lg">
+          ✅ 핵심 키워드 요약이 클립보드에 복사되었습니다!
+        </div>
+      </div>
+
+      <!-- 다시하기 버튼 -->
+      <div class="text-center pb-6">
+        <button onclick="resetGame()" class="w-full sm:w-auto px-8 py-4 bg-[#2C2825] hover:bg-[#3D3B38] text-[#F7F3E9] font-serif-kr font-bold text-base sm:text-lg rounded-xl shadow-md transition cursor-pointer">
+          🔄 다른 선택으로 처음부터 다시 도전하기
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- [팝업 모달] 📜 오늘의 역사 돋보기 (선택 직후 결과 & 역사 해설) -->
+  <div id="history-modal" class="hidden fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="hanji-double-border rounded-2xl max-w-lg w-full p-6 sm:p-7 modal-animate max-h-[90vh] overflow-y-auto">
+      <!-- 상단 인장 & 제목 -->
+      <div class="flex items-center justify-between border-b border-[#D5CBB8] pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">📜</span>
+          <h3 class="font-serif-kr text-lg sm:text-xl font-black text-[#2C2825]">오늘의 역사 돋보기</h3>
+        </div>
+        <span id="modal-keyword-tag" class="crimson-seal px-2.5 py-0.5 text-xs">역사 개념</span>
+      </div>
+
+      <!-- 선택 결과 및 수치 변화 -->
+      <div class="bg-[#F2ECE0] rounded-xl p-4 mb-4 border border-[#D5CBB8]">
+        <div class="text-xs font-bold text-[#5C554E] mb-1">선택 결과</div>
+        <p id="modal-result-text" class="text-sm sm:text-base font-medium text-[#2C2825] mb-3 leading-relaxed">
+          선택 결과 설명
+        </p>
+        <!-- 증감 배지 컨테이너 -->
+        <div id="modal-deltas" class="flex flex-wrap gap-2 text-xs font-bold">
+          <!-- JS로 배지 생성 -->
+        </div>
+      </div>
+
+      <!-- 중3 눈높이 역사 해설 -->
+      <div class="bg-[#2C2825] text-[#F7F3E9] rounded-xl p-4 sm:p-5 mb-6">
+        <div class="flex items-center gap-1.5 text-amber-300 font-serif-kr font-bold text-sm mb-2">
+          <span>💡</span>
+          <span id="modal-history-title">역사적 배경 알아보기</span>
+        </div>
+        <p id="modal-history-desc" class="text-xs sm:text-sm leading-relaxed text-stone-200">
+          역사 개념 설명
+        </p>
+      </div>
+
+      <button id="modal-next-btn" onclick="proceedNextTurn()" class="w-full py-3.5 bg-[#B83B32] hover:bg-[#8E2820] text-white font-serif-kr font-bold text-base rounded-xl shadow transition cursor-pointer">
+        다음 시기로 넘어가기 ➔
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * 1. 게임 상태 및 역사 이벤트 데이터베이스 (10턴 구성)
+     * ============================================================================
+     * 밸런싱 설계 의도:
+     * - 순응/납부 선택을 계속하면 식량과 체력이 빠르게 고갈되어 10턴 완주가 매우 어렵고,
+     *   저항/회피 선택을 하면 곤장(체력 감소)과 함께 분노 지수가 가파르게 올라
+     *   7~9턴 무렵 분노 75% 임계치를 돌파하며 '농민 봉기' 루트가 열리도록 설계했습니다.
+     */
+    const INITIAL_STATE = {
+      turn: 0,          // 0 ~ 9 (총 10턴)
+      health: 85,       // 체력 (0 ~ 100)
+      food: 15,         // 식량 (가마니)
+      tax: 30,          // 세금 부담률 (%)
+      anger: 10,        // 분노 지수 (0 ~ 100%)
+      uprisingJoined: false,
+      gameOverReason: null, // 'health' | 'food' | 'uprising' | 'survived'
+      visitedConcepts: []   // 플레이어가 겪은 역사 개념 기록
+    };
+
+    let gameState = { ...INITIAL_STATE };
+
+    // 10턴(5년 봄/가을) 시나리오 데이터
+    const EVENTS = [
+      {
+        yearLabel: "1년째 봄 (1 / 10턴)",
+        category: "세도 정치와 매관매직",
+        icon: "🏯",
+        title: "신임 사또의 부임과 '부임 축하금' 강요",
+        subtitle: "한양 세도가에 큰돈을 바치고 내려온 새 수령",
+        desc: [
+          "한양의 안동 김씨 세도가에 수만 냥의 뇌물을 바치고 벼슬을 산 신임 사또가 고을에 부임했다.",
+          "사또는 부임 첫날부터 '관아 수리비와 부임 잔치 비용' 명목으로 집집마다 쌀 3가마니씩을 특별 세금으로 거두라고 명령했다. 우리 집 곳간에는 겨우 15가마니뿐인데..."
+        ],
+        historyConcept: {
+          keyword: "세도 정치와 매관매직",
+          title: "벼슬을 돈으로 사고파는 '매관매직'",
+          explanation: "19세기 세도 정치기에는 소수 외척 가문이 권력을 독점하면서 돈으로 관직을 사고파는 매관매직이 성행했습니다. 큰돈을 주고 지방 수령이 된 탐관오리들은 본전을 뽑기 위해 백성들에게 온갖 불법 세금을 뜯어냈습니다."
+        },
+        choices: [
+          {
+            text: "눈물을 머금고 쌀 3가마니를 갖다 바친다. (순응)",
+            hint: "식량 대폭 감소, 분노 소폭 상승",
+            effect: { health: -5, food: -3, tax: +5, anger: +10 },
+            result: "곳간의 쌀 3가마니를 바치자 봄보리 고개를 넘기기가 막막해졌다. 아전들은 고맙다는 말조차 없이 다음 세금을 예고했다."
+          },
+          {
+            text: "흉년이라 쌀이 없다고 사정하며 1가마니만 내고 버틴다. (소극적 저항)",
+            hint: "체력 감소(매질), 분노 크게 상승",
+            effect: { health: -15, food: -1, tax: +8, anger: +20 },
+            result: "관아 아전들에게 끌려가 볼기 열 대를 맞고 1가마니를 빼앗겼다. 억울함과 분노가 치밀어 오른다."
+          }
+        ]
+      },
+      {
+        yearLabel: "1년째 가을 (2 / 10턴)",
+        category: "삼정의 문란 ① 전정",
+        icon: "🌾",
+        title: "추수철에 날아온 '도결' 고지서",
+        subtitle: "배보다 배꼽이 더 큰 토지 세금의 횡포",
+        desc: [
+          "피땀 흘려 가을 추수를 마쳤지만 기쁨도 잠시, 아전들이 세금 장부를 들고 들이닥쳤다.",
+          "원래 법으로 정해진 토지세(전세)는 1가마니 남짓인데, 운송비·창고 보관비·자연 손실 보충비 등 온갖 명목을 붙인 '도결'로 세금이 3배나 뻥튀기되어 청구되었다."
+        ],
+        historyConcept: {
+          keyword: "전정의 문란 (도결)",
+          title: "토지 세금을 부풀려 거두는 '도결'",
+          explanation: "전정(토지세)의 문란은 농민을 가장 먼저 무너뜨렸습니다. 수령과 아전들은 실제 농사지은 땅보다 세금을 많이 매기거나, 각종 수수료와 잡세를 본세에 합쳐 화폐 등으로 뻥튀기해 거두는 '도결'을 일삼았습니다."
+        },
+        choices: [
+          {
+            text: "가족 먹을 양식을 줄여서라도 도결 세금을 전부 납부한다.",
+            hint: "식량 급감, 세금 부담 증가",
+            effect: { health: -5, food: -4, tax: +8, anger: +12 },
+            result: "가을 추수한 쌀 대부분이 세금으로 빠져나갔다. 겨우 남은 좁쌀로 겨울을 나야 할 처지다."
+          },
+          {
+            text: "법전에 없는 부가세는 못 내겠다고 관아 앞에서 항의한다.",
+            hint: "체력 크게 감소, 분노 급상승",
+            effect: { health: -18, food: -2, tax: +10, anger: +22 },
+            result: "'감히 관아의 명을 거역하느냐'며 몽둥이찜질을 당하고 쌀 2가마니를 강제로 압수당했다."
+          }
+        ]
+      },
+      {
+        yearLabel: "2년째 봄 (3 / 10턴)",
+        category: "삼정의 문란 ③ 환곡",
+        icon: "🪣",
+        title: "모래와 겨가 섞인 강제 '환곡' 배급",
+        subtitle: "빌리지도 않은 썩은 쌀을 떠맡기는 고리대금",
+        desc: [
+          "봄철 굶주린 백성을 구제하던 본래 취지는 사라진 지 오래다. 관아에서 집집마다 썩은 쌀 2가마니를 강제로 떠맡겼다.",
+          "가마니를 열어보니 절반은 겨와 모래뿐이다. 하지만 가을이 되면 온전한 햅쌀 2가마니에 비싼 이자까지 붙여 갚아야 한다."
+        ],
+        historyConcept: {
+          keyword: "환곡의 폐단 (고리대금화)",
+          title: "구휼 제도가 고리대금업으로 변질된 '환곡'",
+          explanation: "환곡은 원래 봄에 곡식을 빌려주고 가을에 적은 이자만 받던 빈민 구제 제도였습니다. 그러나 조선 후기에는 수령과 아전들이 이자를 챙기기 위해 필요 없는 농민에게까지 강제로 빌려주고, 겨가 섞인 쌀을 준 뒤 온전한 쌀로 갚게 하는 고리대금으로 변질되었습니다."
+        },
+        choices: [
+          {
+            text: "울며 겨자 먹기로 썩은 환곡을 받아 들고 가을 빚을 걱정한다.",
+            hint: "식량(겨 섞인 쌀) +1, 세금 부담 급등",
+            effect: { health: -5, food: +1, tax: +12, anger: +12 },
+            result: "모래를 골라내고 겨죽을 끓여 연명했지만, 가을에 갚아야 할 빚더미가 눈덩이처럼 불어났다."
+          },
+          {
+            text: "우리 집은 양식이 충분하니 환곡을 받지 않겠다고 거절한다.",
+            hint: "체력 감소, 분노 상승",
+            effect: { health: -12, food: -1, tax: +8, anger: +18 },
+            result: "아전은 코웃음을 치며 '안 받아도 가을에 이자는 똑같이 내야 한다'며 장부에 이름을 적어버렸다."
+          }
+        ]
+      },
+      {
+        yearLabel: "2년째 가을 (4 / 10턴)",
+        category: "삼정의 문란 ② 군정",
+        icon: "👶",
+        title: "갓난아기에게 날아온 군포 독촉장 '황구첨정'",
+        subtitle: "포대기에 싸인 아들이 장정으로 등록되다",
+        desc: [
+          "군역의 의무를 대신해 내는 옷감(군포) 징수 철이 되었다. 그런데 아전이 가져온 군적 장부에 올해 태어난 갓난아들 '돌쇠'의 이름이 올라가 있다!",
+          "아전은 '내년부터 돌쇠 몫의 군포 2필(쌀 2가마니 값)을 내라'며 으름장을 놓는다."
+        ],
+        historyConcept: {
+          keyword: "군정의 문란 (황구첨정)",
+          title: "어린아이에게까지 군포를 거두는 '황구첨정'",
+          explanation: "양반과 부유층이 각종 편법으로 군역을 빠져나가자, 부족해진 군포 수입을 채우기 위해 아전들은 갓난아기나 어린아이까지 장정으로 거짓 등록해 세금을 거두었습니다. 이를 '황구첨정(누런 입의 어린아이에게 세금을 매김)'이라 부릅니다."
+        },
+        choices: [
+          {
+            text: "아이가 화를 입을까 두려워 군포 값을 쌀로 대신 납부한다.",
+            hint: "식량 감소, 세금 부담 상승",
+            effect: { health: -5, food: -3, tax: +10, anger: +15 },
+            result: "아기 분유(미음) 끓일 쌀까지 긁어모아 바쳤다. 아내의 눈에서 피눈물이 흐른다."
+          },
+          {
+            text: "포대기에 싸인 아기를 아전 앞에 내보이며 호통을 친다.",
+            hint: "체력 감소, 분노 대폭 상승",
+            effect: { health: -15, food: -1, tax: +10, anger: +22 },
+            result: "'법이 그러니 어쩌겠느냐'며 아전들이 세간살이를 부수고 쌀 1가마니를 뺏어갔다. 마을 사람들의 분노가 들끓기 시작했다."
+          }
+        ]
+      },
+      {
+        yearLabel: "3년째 봄 (5 / 10턴)",
+        category: "농민 봉기의 서막",
+        icon: "🔥",
+        title: "북쪽 평안도에서 '홍경래의 난'이 일어났다는 소문!",
+        subtitle: "세도 정치와 지역 차별에 맞선 대규모 봉기",
+        desc: [
+          "장터에 다녀온 이웃 김첨지가 숨을 헐떡이며 놀라운 소식을 전했다. 평안도에서 몰락 양반 홍경래가 농민, 광산 노동자, 상인들을 이끌고 관아를 점령했다는 것이다!",
+          "비록 관군에 의해 진압되었다는 후문도 들리지만, '백성도 뭉치면 탐관오리를 몰아낼 수 있다'는 이야기가 마을 전체에 퍼지고 있다."
+        ],
+        historyConcept: {
+          keyword: "홍경래의 난 (1811)",
+          title: "세도 정치에 맞선 첫 대규모 봉기 '홍경래의 난'",
+          explanation: "1811년 평안도에서 일어난 홍경래의 난은 세도 정권의 가혹한 수탈과 평안도민에 대한 극심한 지역 차별에 반발하여 일어났습니다. 농민·상인·광산 노동자가 연합해 청천강 이북 지역을 장악할 만큼 기세가 컸으며, 이후 전국 농민 봉기의 신호탄이 되었습니다."
+        },
+        choices: [
+          {
+            text: "위험한 소문은 입 밖에도 내지 않고 묵묵히 밭을 간다.",
+            hint: "체력 소모, 식량 소폭 확보",
+            effect: { health: -10, food: +1, tax: +5, anger: +5 },
+            result: "밤낮없이 밭을 일구어 춘궁기를 버텼지만, 몸은 쇠약해지고 세금 독촉은 멈추지 않는다."
+          },
+          {
+            text: "장터에서 이웃 농민들과 모여 세도 정치의 부당함을 성토한다.",
+            hint: "식량 -1(가족 부양), 분노 크게 상승",
+            effect: { health: -5, food: -1, tax: +5, anger: +20 },
+            result: "이웃들과 울분을 나누며 '우리도 더 이상 당하고만 살 수 없다'는 결의를 다졌다."
+          }
+        ]
+      },
+      {
+        yearLabel: "3년째 가을 (6 / 10턴)",
+        category: "삼정의 문란 ② 군정",
+        icon: "🪦",
+        title: "돌아가신 아버지 앞으로 날아온 '백골징포'",
+        subtitle: "무덤 속 망자까지 불러내는 탐관오리의 탐욕",
+        desc: [
+          "3년 전 굶주림과 병으로 돌아가신 아버지의 제사를 지낸 다음 날, 관아에서 군포 독촉장이 날아왔다.",
+          "사망 신고를 했음에도 아전은 '장부에서 지우려면 뇌물을 바치든가, 아니면 죽은 아버지 몫의 군포를 계속 내라'고 협박한다."
+        ],
+        historyConcept: {
+          keyword: "군정의 문란 (백골징포)",
+          title: "죽은 사람에게까지 군포를 거두는 '백골징포'",
+          explanation: "백골징포는 이미 사망하여 백골이 된 사람에게까지 군포를 부과하는 극단적인 수탈입니다. 이 외에도 도망친 친척의 세금을 대신 물리는 '족징', 이웃에게 떠넘기는 '인징'까지 겹치면서 농민들은 고향을 버리고 도망칠 수밖에 없었습니다."
+        },
+        choices: [
+          {
+            text: "조상님 욕보일 수 없어 빚을 내어 백골징포 값을 치른다.",
+            hint: "식량 감소, 세금 폭등",
+            effect: { health: -8, food: -3, tax: +12, anger: +15 },
+            result: "남은 쌀마저 털어 바치고 고리대금 빚까지 졌다. 이제 곳간 바닥이 드러나기 시작했다."
+          },
+          {
+            text: "아버지 위패를 들고 관아 문 앞에서 통곡하며 항의한다.",
+            hint: "체력 급감, 분노 폭발적 상승",
+            effect: { health: -18, food: -1, tax: +10, anger: +25 },
+            result: "아전들에게 끌려 나와 길바닥에 내동댕이쳐졌다. 이를 지켜본 마을 청년들이 주먹을 불끈 쥐었다."
+          }
+        ]
+      },
+      {
+        yearLabel: "4년째 봄 (7 / 10턴)",
+        category: "제도적 개혁의 한계",
+        icon: "⚖️",
+        title: "“암행어사 출두요!” ...그러나 바뀐 것은 없었다",
+        subtitle: "탐관오리는 쫓겨났지만, 세도 정치의 구조는 그대로",
+        desc: [
+          "드디어 한양에서 파견된 암행어사가 출두하여 악명 높던 사또를 파직시켰다! 마을 사람들은 만세를 부르며 기뻐했다.",
+          "하지만 기쁨도 잠시, 한 달 뒤 세도가에 더 많은 뇌물을 바치고 내려온 신임 사또가 부임하자마자 이전 사또보다 더 가혹하게 세금을 걷기 시작했다."
+        ],
+        historyConcept: {
+          keyword: "암행어사 파견과 세도 정치의 한계",
+          title: "암행어사로도 막을 수 없었던 구조적 모순",
+          explanation: "조선 정부는 탐관오리를 감찰하기 위해 암행어사를 파견했으나, 권력의 핵심인 세도 가문이 매관매직을 계속하는 한 수령 한 명을 바꾸는 것은 임시방편에 불과했습니다. 새로 온 수령 역시 뇌물 본전을 뽑기 위해 똑같이 수탈을 반복했습니다."
+        },
+        choices: [
+          {
+            text: "체념하고 산나물을 캐며 어떻게든 버텨본다.",
+            hint: "체력 회복 +5, 식량 -1",
+            effect: { health: +5, food: -1, tax: +10, anger: +10 },
+            result: "잠시 숨을 돌리며 산나물로 배를 채웠지만, 세금 부담률은 어느덧 감당할 수 없는 수준까지 치솟았다."
+          },
+          {
+            text: "“수령이 바뀌어도 똑같다! 세도 정치가 문제다!”라며 분노한다.",
+            hint: "식량 -1, 분노 크게 상승",
+            effect: { health: -5, food: -1, tax: +10, anger: +20 },
+            result: "왕의 어사도 백성을 구해주지 못한다는 사실에 마을 사람들의 분노가 임계점에 다다랐다."
+          }
+        ]
+      },
+      {
+        yearLabel: "4년째 가을 (8 / 10턴)",
+        category: "전국적 농민 봉기 확산",
+        icon: "📢",
+        title: "경상도 '진주 농민 봉기' 소식과 격앙된 장터",
+        subtitle: "백낙신의 탐학에 맞서 진주 농민들이 일어서다!",
+        desc: [
+          "경상우병사 백낙신의 횡포에 분노한 진주 농민들이 유계춘을 중심으로 대나무 창과 몽둥이를 들고 관아를 습격했다는 소식이 전해졌다!",
+          "이 소식을 들은 우리 고을 농민들도 밤마다 횃불을 들고 모여 수령과 아전들을 몰아내자고 목소리를 높이고 있다."
+        ],
+        historyConcept: {
+          keyword: "임술 농민 봉기 (진주 농민 봉기, 1862)",
+          title: "삼남 지방 전체로 번진 '임술 농민 봉기'",
+          explanation: "1862년(임술년) 경상도 진주에서 탐관오리 백낙신의 수탈에 맞서 일어난 진주 농민 봉기는 순식간에 충청·전라·경상도(삼남 지방) 전역으로 확산되었습니다. 이를 '임술 농민 봉기'라 하며, 놀란 정부는 삼정의 문란을 고치기 위해 '삼정이정청'을 설치했습니다."
+        },
+        choices: [
+          {
+            text: "아직은 때가 아니라고 생각하며 가족을 지키기 위해 몸을 사린다.",
+            hint: "식량 -2(가을 세금 납부), 분노 +10",
+            effect: { health: -5, food: -2, tax: +10, anger: +10 },
+            result: "남은 쌀 2가마니마저 세금으로 내고 나니 이제 굶어 죽기 직전이다."
+          },
+          {
+            text: "마을 농민들과 함께 사발통문을 돌리며 봉기를 준비한다.",
+            hint: "체력 -10, 분노 +20",
+            effect: { health: -10, food: -1, tax: +8, anger: +20 },
+            result: "주동자가 드러나지 않도록 둥글게 이름을 적은 사발통문이 마을을 돌았다. 이제 거사는 코앞이다!"
+          }
+        ]
+      },
+      {
+        yearLabel: "5년째 봄 (9 / 10턴)",
+        category: "가렴주구의 절정",
+        icon: "⛈️",
+        title: "가뭄과 환곡 빚 독촉, 전답 압류 위기",
+        subtitle: "마지막 남은 논마저 관아에 빼앗길 위기",
+        desc: [
+          "봄 가뭄이 극심해 모내기도 힘든데, 관아 포졸들이 들이닥쳐 밀린 환곡 이자와 군포를 당장 내놓으라고 협박한다.",
+          "포졸들은 '내일까지 갚지 못하면 마지막 남은 논마저 관아에서 압류하고 온 가족을 관노비로 삼겠다'며 대문을 부수고 나갔다."
+        ],
+        historyConcept: {
+          keyword: "농민층의 몰락과 유랑",
+          title: "삶의 터전을 잃고 유랑민·화전민이 된 농민들",
+          explanation: "세도 정치기 삼정의 문란이 극에 달하면서 수많은 자영농이 토지를 잃고 소작농이나 유랑민으로 전락했습니다. 갈 곳을 잃은 농민들은 산속으로 들어가 화전민이 되거나, 생존을 위해 농민 봉기에 가담할 수밖에 없었습니다."
+        },
+        choices: [
+          {
+            text: "집안의 마지막 놋그릇과 옷가지까지 팔아 포졸들에게 바친다.",
+            hint: "식량 -2, 체력 -10",
+            effect: { health: -10, food: -2, tax: +10, anger: +15 },
+            result: "빈털터리가 되어 하루하루를 연명한다. 이제 더 이상 빼앗길 것조차 남지 않았다."
+          },
+          {
+            text: "포졸들을 막아서며 '차라리 죽여라!'라고 맞선다.",
+            hint: "체력 -15, 분노 +20",
+            effect: { health: -15, food: -1, tax: +10, anger: +20 },
+            result: "온몸이 피투성이가 되었지만, 마을 사람들이 몰려와 포졸들을 쫓아냈다!"
+          }
+        ]
+      },
+      {
+        yearLabel: "5년째 가을 (10 / 10턴 - 최후의 결단)",
+        category: "역사의 갈림길",
+        icon: "🌅",
+        title: "5년째 가을, 운명의 날이 밝았다",
+        subtitle: "순응할 것인가, 시대의 모순에 맞서 일어설 것인가",
+        desc: [
+          "5년 동안 온갖 수탈과 굶주림을 견뎌왔지만, 사또와 아전들은 올해도 어김없이 수확량의 대부분을 세금으로 내놓으라며 관아 문을 굳게 닫고 잔치를 벌이고 있다.",
+          "마을 앞 느티나무 아래 수백 명의 농민들이 횃불과 농기구를 들고 모였다. 김서방, 당신의 마지막 선택은 무엇인가?"
+        ],
+        historyConcept: {
+          keyword: "농민 의식의 성장과 봉기의 의의",
+          title: "역사의 주체로 성장한 조선 후기 농민들",
+          explanation: "19세기 농민 봉기는 비록 관군에 의해 진압되는 한계를 보였으나, 부패한 지배층의 수탈에 맞서 백성 스스로 사회 모순을 바로잡으려 했다는 점에서 큰 의의가 있습니다. 이러한 농민들의 저항 의식은 훗날 동학 농민 운동으로 이어졌습니다."
+        },
+        isFinalTurn: true,
+        choices: [
+          {
+            text: "고개를 숙이고 마지막 남은 식량까지 모두 세금으로 바친다.",
+            hint: "합법적 순응의 결말 확인",
+            effect: { health: -10, food: -4, tax: +10, anger: +5 },
+            result: "마지막 쌀 한 톨까지 바치고 텅 빈 곳간 앞에 주저앉았다."
+          },
+          {
+            text: "한밤중에 가족을 이끌고 정든 고향을 버린 채 산속으로 야반도주한다.",
+            hint: "화전민/유랑민 엔딩으로 이동",
+            forceEnding: "food",
+            effect: { health: -10, food: -2, tax: 0, anger: 0 },
+            result: "탐관오리의 손아귀를 피해 깊은 산속으로 숨어들었다."
+          }
+        ]
+      }
+    ];
+
+    // 엔딩 데이터
+    const ENDINGS = {
+      uprising: {
+        badge: "엔딩 A · 역사를 바꾼 주역",
+        icon: "🔥",
+        title: "횃불을 든 농민군, 관아의 문을 열다!",
+        desc: "김서방과 수백 명의 농민들은 횃불과 죽창을 들고 관아로 진격했다! 탐관오리 사또는 줄행랑을 쳤고, 농민들은 불법 세금 장부(환곡·군포 장부)를 불태우며 굶주린 백성들에게 곡식 창고를 개방했다. 비록 훗날 조정에서 파견한 관군과 타협하며 해산했지만, 김서방의 외침은 세도 정권의 간담을 서늘하게 만들고 '삼정이정청' 설치를 이끌어낸 위대한 발걸음이 되었다.",
+        historyNote: "📌 <strong>역사적 의의:</strong> 1862년 진주에서 시작된 임술 농민 봉기는 조선 후기 농민들이 단순한 수탈의 대상에서 벗어나, 부패한 지배 체제를 비판하고 개혁을 요구하는 <strong>역사의 주체</strong>로 성장했음을 보여주었습니다."
+      },
+      survived: {
+        badge: "엔딩 B · 기적의 생존자",
+        icon: "🌾",
+        title: "가혹한 세월을 버텨낸 기적의 생존자",
+        desc: "5년 동안 이어진 매관매직과 삼정의 문란 속에서도 김서방은 초근목피로 연명하며 기적적으로 가족의 목숨을 지켜냈다. 하지만 텅 빈 곳간과 쇠약해진 몸, 그리고 여전히 기세등등한 탐관오리의 모습을 보며 김서방은 깨달았다. 개인의 성실함과 인내만으로는 이 썩어빠진 세상의 구조적 모순을 결코 바꿀 수 없다는 사실을...",
+        historyNote: "📌 <strong>역사적 성찰:</strong> 세도 정치기에는 아무리 성실히 농사를 지어도 전정·군정·환곡의 삼중 수탈 때문에 자영농이 몰락할 수밖에 없는 구조적 한계가 존재했습니다."
+      },
+      food: {
+        badge: "엔딩 C · 유랑민과 화전민",
+        icon: "⛰️",
+        title: "고향을 등지고 산속으로 숨어든 유랑민",
+        desc: "더 이상 낼 세금도, 먹을 양식도 남지 않은 김서방은 결국 조상 대대로 살아온 정든 고향을 버리고 야반도주를 택했다. 깊은 산속에 불을 질러 밭을 일구는 '화전민'이 되거나 떠돌이 유랑민이 되어 탐관오리의 눈을 피해 살아가게 되었다.",
+        historyNote: "📌 <strong>역사적 배경:</strong> 19세기 삼정의 문란이 심화되면서 세금을 감당하지 못해 호적에서 사라지고 유랑민이나 화전민이 된 농민들이 전국적으로 급증했습니다."
+      },
+      health: {
+        badge: "엔딩 D · 비극적 최후",
+        icon: "🕯️",
+        title: "가렴주구 속에서 끝내 쓰러진 가장",
+        desc: "밤낮없는 고된 노동과 굶주림, 그리고 관아에서 당한 모진 매질의 후유증으로 김서방은 끝내 자리에서 일어나지 못했다. 앓아누운 김서방의 머리맡에는 여전히 아전이 던지고 간 백골징포와 환곡 독촉장이 놓여 있었다.",
+        historyNote: "📌 <strong>역사적 배경:</strong> 탐관오리의 가혹한 징세(가렴주구)는 수많은 농민 가정의 생계를 파괴하고 죽음으로 내몰았으며, 이는 곧 전국적인 민란 폭발의 원인이 되었습니다."
+      }
+    };
+
+    /**
+     * ============================================================================
+     * 2. 화면 전환 및 게임 로직 제어 함수
+     * ============================================================================
+     */
+    function startGame() {
+      gameState = {
+        ...INITIAL_STATE,
+        visitedConcepts: []
+      };
+
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('ending-screen').classList.add('hidden');
+      document.getElementById('status-bar').classList.remove('hidden');
+      document.getElementById('game-screen').classList.remove('hidden');
+
+      updateStatusBar();
+      renderTurn();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetGame() {
+      startGame();
+    }
+
+    // 상단 상태창 UI 업데이트
+    function updateStatusBar() {
+      const currentEvent = EVENTS[Math.min(gameState.turn, EVENTS.length - 1)];
+      document.getElementById('turn-badge').textContent = currentEvent.yearLabel;
+
+      // 체력 (0~100)
+      const healthClamped = Math.max(0, Math.min(100, gameState.health));
+      document.getElementById('stat-health-text').textContent = `${healthClamped} / 100`;
+      document.getElementById('stat-health-bar').style.width = `${healthClamped}%`;
+
+      // 식량 (가마니, 최대 게이지 20 기준)
+      const foodDisplay = Math.max(0, gameState.food);
+      const foodPercent = Math.max(0, Math.min(100, (foodDisplay / 20) * 100));
+      document.getElementById('stat-food-text').textContent = `${foodDisplay} 가마니`;
+      document.getElementById('stat-food-bar').style.width = `${foodPercent}%`;
+
+      // 세금 부담률
+      const taxPercent = Math.max(0, Math.min(100, gameState.tax));
+      document.getElementById('stat-tax-text').textContent = `${gameState.tax}%`;
+      document.getElementById('stat-tax-bar').style.width = `${taxPercent}%`;
+
+      // 분노 지수 (0~100%)
+      const angerClamped = Math.max(0, Math.min(100, gameState.anger));
+      document.getElementById('stat-anger-text').textContent = `${angerClamped}%`;
+      document.getElementById('stat-anger-bar').style.width = `${angerClamped}%`;
+
+      // 분노 75% 이상 시 경보 표시
+      const angerAlert = document.getElementById('anger-alert');
+      if (angerClamped >= 75) {
+        angerAlert.classList.remove('hidden');
+      } else {
+        angerAlert.classList.add('hidden');
+      }
+    }
+
+    // 현재 턴의 사건과 선택지 렌더링
+    function renderTurn() {
+      const ev = EVENTS[gameState.turn];
+
+      document.getElementById('event-category').textContent = ev.category;
+      document.getElementById('event-icon').textContent = ev.icon;
+      document.getElementById('event-title').textContent = ev.title;
+      document.getElementById('event-subtitle').textContent = ev.subtitle;
+
+      // 본문 렌더링
+      const descContainer = document.getElementById('event-desc');
+      descContainer.innerHTML = ev.desc.map(p => `<p>${p}</p>`).join('');
+
+      // 분노 지수 안내 문구 업데이트
+      const hintEl = document.getElementById('uprising-status-hint');
+      if (gameState.anger >= 75) {
+        hintEl.innerHTML = `<span class="text-[#B83B32] font-bold">🔥 분노 ${gameState.anger}%! 농민 봉기 선택지 활성화됨</span>`;
+      } else {
+        hintEl.textContent = `현재 분노 ${gameState.anger}% (75% 도달 시 봉기 가능)`;
+      }
+
+      // 선택지 버튼 렌더링
+      const choicesContainer = document.getElementById('choices-container');
+      choicesContainer.innerHTML = '';
+
+      ev.choices.forEach((choice, idx) => {
+        const btn = document.createElement('button');
+        btn.className = "choice-btn w-full text-left p-4 sm:p-5 rounded-xl bg-[#FCF9F2] border-2 border-[#C8BCA6] cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2";
+        btn.onclick = () => handleChoice(idx);
+        btn.innerHTML = `
+          <div class="font-bold text-sm sm:text-base text-[#2C2825]">
+            <span class="inline-block w-6 h-6 rounded-full bg-[#2C2825] text-[#F7F3E9] text-xs text-center leading-6 mr-2">${idx + 1}</span>
+            ${choice.text}
+          </div>
+          <span class="text-xs font-medium text-[#5C554E] bg-[#EFE8D8] px-2.5 py-1 rounded-md shrink-0 self-start sm:self-center">
+            ${choice.hint}
+          </span>
+        `;
+        choicesContainer.appendChild(btn);
+      });
+
+      // 분노 75% 이상일 때 특수 선택지 [🔥 농민 봉기(민란)에 참여한다] 해금!
+      // (8턴 이후 또는 최종 10턴에서 분노 75% 이상이면 봉기 결단 가능)
+      if (gameState.anger >= 75 && gameState.turn >= 7) {
+        const revoltBtn = document.createElement('button');
+        revoltBtn.className = "choice-btn uprising-glow w-full text-left p-4 sm:p-5 rounded-xl bg-[#B83B32] hover:bg-[#8E2820] border-2 border-[#6E1C16] text-white cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2";
+        revoltBtn.onclick = () => handleUprisingChoice();
+        revoltBtn.innerHTML = `
+          <div class="font-serif-kr font-bold text-sm sm:text-base">
+            🔥 [특수 결단] 횃불을 들고 농민 봉기(민란)에 참여한다!
+          </div>
+          <span class="text-xs font-bold bg-[#6E1C16] text-amber-200 px-2.5 py-1 rounded-md shrink-0 self-start sm:self-center">
+            분노 75% 돌파 해금!
+          </span>
+        `;
+        choicesContainer.appendChild(revoltBtn);
+      }
+    }
+
+    // 일반 선택지 처리
+    function handleChoice(choiceIdx) {
+      const ev = EVENTS[gameState.turn];
+      const choice = ev.choices[choiceIdx];
+
+      // 수치 반영
+      gameState.health = Math.max(0, Math.min(100, gameState.health + choice.effect.health));
+      gameState.food = gameState.food + choice.effect.food;
+      gameState.tax = Math.max(0, gameState.tax + choice.effect.tax);
+      gameState.anger = Math.max(0, Math.min(100, gameState.anger + choice.effect.anger));
+
+      if (choice.forceEnding) {
+        gameState.gameOverReason = choice.forceEnding;
+      }
+
+      // 학습한 역사 개념 기록 (중복 방지)
+      recordConcept(ev.historyConcept);
+
+      updateStatusBar();
+      showHistoryModal(choice.result, choice.effect, ev.historyConcept);
+    }
+
+    // 특수 선택지: 농민 봉기 참여 처리
+    function handleUprisingChoice() {
+      const ev = EVENTS[gameState.turn];
+      gameState.uprisingJoined = true;
+      gameState.gameOverReason = 'uprising';
+
+      // 임술 농민 봉기 개념도 함께 기록
+      recordConcept(ev.historyConcept);
+      recordConcept(EVENTS[9].historyConcept);
+
+      const effect = { health: -10, food: 0, tax: -30, anger: 100 - gameState.anger };
+      showHistoryModal(
+        "더 이상 탐관오리의 수탈을 참을 수 없었던 김서방은 농기구와 횃불을 들고 수백 명의 농민들과 함께 관아로 향했다!",
+        effect,
+        {
+          keyword: "농민 봉기 (민란) 폭발",
+          title: "참다못한 농민들이 역사의 주체로 일어서다",
+          explanation: "세도 정치의 매관매직과 삼정의 문란이 한계에 달하자, 농민들은 사발통문을 돌리고 봉기를 일으켜 탐관오리를 내쫓고 불법 세금 장부를 불태웠습니다. 이는 1862년 임술 농민 봉기로 전국에 확산되었습니다."
+        }
+      );
+    }
+
+    // 겪은 역사 개념 저장
+    function recordConcept(conceptObj) {
+      if (!gameState.visitedConcepts.some(c => c.keyword === conceptObj.keyword)) {
+        gameState.visitedConcepts.push(conceptObj);
+      }
+    }
+
+    // [📜 오늘의 역사 돋보기] 팝업 모달 표시
+    function showHistoryModal(resultText, effect, historyConcept) {
+      document.getElementById('modal-keyword-tag').textContent = historyConcept.keyword;
+      document.getElementById('modal-result-text').textContent = resultText;
+      document.getElementById('modal-history-title').textContent = historyConcept.title;
+      document.getElementById('modal-history-desc').textContent = historyConcept.explanation;
+
+      // 수치 변화 배지 생성
+      const deltasContainer = document.getElementById('modal-deltas');
+      deltasContainer.innerHTML = '';
+
+      const addDeltaBadge = (label, val, unit, goodWhenPositive) => {
+        if (val === 0) return;
+        const isPositive = val > 0;
+        const isGood = goodWhenPositive ? isPositive : !isPositive;
+        const colorClass = isGood
+          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+          : "bg-rose-100 text-rose-800 border-rose-300";
+        const sign = isPositive ? "+" : "";
+        const badge = document.createElement('span');
+        badge.className = `px-2.5 py-1 rounded-md border ${colorClass}`;
+        badge.textContent = `${label} ${sign}${val}${unit}`;
+        deltasContainer.appendChild(badge);
+      };
+
+      addDeltaBadge("❤️ 체력", effect.health, "", true);
+      addDeltaBadge("🌾 식량", effect.food, "가마니", true);
+      addDeltaBadge("📜 세금 부담", effect.tax, "%", false);
+      addDeltaBadge("🔥 분노 지수", effect.anger, "%", false);
+
+      // 버튼 텍스트 설정 (종료 조건 충족 시 결과 확인 버튼으로 변경)
+      const nextBtn = document.getElementById('modal-next-btn');
+      if (checkEndCondition()) {
+        nextBtn.textContent = "최종 결과 및 수업 정리 확인하기 ➔";
+      } else {
+        nextBtn.textContent = "다음 시기로 넘어가기 ➔";
+      }
+
+      document.getElementById('history-modal').classList.remove('hidden');
+    }
+
+    // 게임 종료 조건 검사
+    function checkEndCondition() {
+      if (gameState.uprisingJoined || gameState.gameOverReason === 'uprising') {
+        gameState.gameOverReason = 'uprising';
+        return true;
+      }
+      if (gameState.gameOverReason === 'food' || gameState.food <= 0) {
+        gameState.gameOverReason = 'food';
+        return true;
+      }
+      if (gameState.health <= 0) {
+        gameState.gameOverReason = 'health';
+        return true;
+      }
+      if (gameState.turn >= EVENTS.length - 1) {
+        gameState.gameOverReason = 'survived';
+        return true;
+      }
+      return false;
+    }
+
+    // 다음 턴으로 진행 또는 엔딩 화면으로 이동
+    function proceedNextTurn() {
+      document.getElementById('history-modal').classList.add('hidden');
+
+      if (checkEndCondition()) {
+        renderEnding();
+        return;
+      }
+
+      gameState.turn += 1;
+      updateStatusBar();
+      renderTurn();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // 최종 엔딩 및 활동지 요약 렌더링
+    function renderEnding() {
+      document.getElementById('status-bar').classList.add('hidden');
+      document.getElementById('game-screen').classList.add('hidden');
+      document.getElementById('ending-screen').classList.remove('hidden');
+
+      const endingKey = gameState.gameOverReason || 'survived';
+      const endingData = ENDINGS[endingKey];
+
+      document.getElementById('ending-badge').textContent = endingData.badge;
+      document.getElementById('ending-icon').textContent = endingData.icon;
+      document.getElementById('ending-title').textContent = endingData.title;
+      document.getElementById('ending-desc').textContent = endingData.desc;
+      document.getElementById('ending-history-note').innerHTML = endingData.historyNote;
+
+      // 최종 지표 표시
+      document.getElementById('end-stat-health').textContent = `${Math.max(0, gameState.health)} / 100`;
+      document.getElementById('end-stat-food').textContent = `${Math.max(0, gameState.food)} 가마니`;
+      document.getElementById('end-stat-tax').textContent = `${gameState.tax}%`;
+      document.getElementById('end-stat-anger').textContent = `${Math.min(100, gameState.anger)}%`;
+
+      // 수업 활동지 핵심 키워드 카드 생성
+      const keywordsList = document.getElementById('learned-keywords-list');
+      keywordsList.innerHTML = '';
+
+      gameState.visitedConcepts.forEach(item => {
+        const card = document.createElement('div');
+        card.className = "bg-[#FAF6ED] border border-[#D5CBB8] rounded-xl p-3.5 text-left";
+        card.innerHTML = `
+          <div class="font-bold text-sm text-[#8E2820] mb-1">▪ ${item.keyword}</div>
+          <div class="text-xs sm:text-sm text-[#2C2825] leading-relaxed">${item.explanation}</div>
+        `;
+        keywordsList.appendChild(card);
+      });
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // 활동지 정리용 텍스트 클립보드 복사 (iFrame 호환 execCommand 사용)
+    function copySummaryToClipboard() {
+      const endingTitle = document.getElementById('ending-title').textContent;
+      const lines = [
+        `[조선 후기 세도 정치와 농민 봉기 시뮬레이터 결과]`,
+        `- 도달 엔딩: ${endingTitle}`,
+        `- 최종 상태: 체력 ${Math.max(0, gameState.health)}, 식량 ${Math.max(0, gameState.food)}가마니, 세금부담 ${gameState.tax}%, 분노 ${gameState.anger}%`,
+        ``,
+        `[체험한 핵심 역사 키워드]`
+      ];
+
+      gameState.visitedConcepts.forEach(c => {
+        lines.push(`• ${c.keyword}: ${c.explanation}`);
+      });
+
+      const textArea = document.createElement("textarea");
+      textArea.value = lines.join("\n");
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      document.body.appendChild(textArea);
+      textArea.select();
+
+      try {
+        document.execCommand('copy');
+        const toast = document.getElementById('copy-toast');
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 3000);
+      } catch (err) {
+        console.error('복사 실패:', err);
+      } finally {
+        document.body.removeChild(textArea);
+      }
+    }
+  </script>
+</body>
+</html>
